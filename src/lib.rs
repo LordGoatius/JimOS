@@ -6,7 +6,10 @@
 #![reexport_test_harness_main = "test_main"]
 
 pub fn init() {
+    gdt::init();
     interrupts::init_idt();
+    unsafe { interrupts::PICS.lock().initialize() };
+    x86_64::instructions::interrupts::enable();
 }
 
 // TEST STUFF
@@ -32,7 +35,7 @@ pub fn test_panic_handler(info: &PanicInfo) -> ! {
     serial_println!("Error: {}\n", info);
     exit_qemu(QemuExitCode::Failed);
 
-    loop {}
+    hlt_loop();
 }
 
 pub fn test_runner(tests: &[&dyn Testable]) {
@@ -45,11 +48,16 @@ pub fn test_runner(tests: &[&dyn Testable]) {
 }
 
 #[cfg(test)]
-#[no_mangle]
-pub extern "C" fn _start() -> ! {
+use bootloader::{entry_point, BootInfo};
+
+#[cfg(test)]
+entry_point!(test_kernel_main);
+
+#[cfg(test)]
+pub fn test_kernel_main(_boot_info: &'static BootInfo) -> ! {
     init();
     test_main();
-    loop {}
+    hlt_loop();
 }
 
 #[cfg(test)]
@@ -74,6 +82,14 @@ pub fn exit_qemu(exit_code: QemuExitCode) {
     }
 }
 
+pub fn hlt_loop() -> ! {
+    loop {
+        x86_64::instructions::hlt();
+    }
+}
+
 pub mod serial;
 pub mod vga_buffer;
 pub mod interrupts;
+pub mod gdt;
+pub mod memory;
